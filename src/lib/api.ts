@@ -1,178 +1,178 @@
-import { supabase } from './supabase'
-import type { FeedSplit, Profile, Side, Tag, VoteResult } from './types'
+import { supabase } from './supabase';
+import type { Side } from '../gesture/swipe-engine';
 
-// Every RPC name and argument key lives here. Matches
-// 20261110193500_wave1_schema.sql exactly.
-const RPC = {
-  getFeed:         { name: 'get_feed',         args: (p: { limit: number }) => ({ p_limit: p.limit }) },
-  recordView:      { name: 'record_view',      args: (p: { postId: string }) => ({ p_post_id: p.postId }) },
-  recordSkip:      { name: 'record_skip',      args: (p: { postId: string; early: boolean }) => ({ p_post_id: p.postId, p_early: p.early }) },
-  castChoice:      { name: 'cast_choice',      args: (p: { cardId: string; side: Side }) => ({ p_card_id: p.cardId, p_side: p.side, p_guess: null }) },
-  getSplitResult:  { name: 'get_split_result', args: (p: { cardId: string }) => ({ p_card_id: p.cardId }) },
-  createDilemma:   { name: 'create_dilemma',   args: (p: { prompt: string; optionA: string; optionB: string; tagSlug: string; remixOf: string | null }) => ({ p_prompt: p.prompt, p_option_a: p.optionA, p_option_b: p.optionB, p_tag_slug: p.tagSlug, p_remix_of: p.remixOf }) },
-  deleteSplit:     { name: 'delete_split',     args: (p: { postId: string }) => ({ p_post_id: p.postId }) },
-  reportPost:      { name: 'report_post',      args: (p: { postId: string; reason: string }) => ({ p_post_id: p.postId, p_reason: p.reason }) },
-  redeemInvite:    { name: 'redeem_invite',    args: (p: { code: string }) => ({ p_code: p.code }) },
-  completeProfile: { name: 'complete_profile', args: (p: { handle: string; displayName: string; avatarColor: string; birthDate: string }) => ({ p_handle: p.handle, p_display_name: p.displayName, p_avatar_color: p.avatarColor, p_birth_date: p.birthDate }) },
-  setPrivate:      { name: 'set_private',      args: (p: { isPrivate: boolean }) => ({ p_private: p.isPrivate }) },
-  isMember:        { name: 'is_member',        args: () => ({}) },
-  authIsAnonymous: { name: 'auth_is_anonymous', args: () => ({}) },
-} as const
+export type { Side };
 
-async function rpc<T>(key: keyof typeof RPC, payload?: any): Promise<T> {
-  const { name, args } = RPC[key] as any
-  const { data, error } = await supabase.rpc(name, args(payload ?? {}))
-  if (error) throw new Error(`${name}: ${error.message}`)
-  return data as T
+export interface FeedItem {
+  post_id: string;
+  card_id: string;
+  creator_id: string;
+  creator_handle: string | null;
+  prompt: string;
+  option_a: string;
+  option_b: string;
+  tag_slug: string;
+  remix_of_post_id: string | null;
+  created_at: string;
+  score: number;
 }
 
-function one<T>(v: T | T[] | null): T | null {
-  if (v == null) return null
-  return Array.isArray(v) ? (v[0] ?? null) : v
+export interface SplitResult {
+  a_votes: number;
+  b_votes: number;
+  total_votes: number;
+  my_side?: Side;
 }
 
-// Feed
-
-export async function fetchFeed(limit = 20): Promise<FeedSplit[]> {
-  const data = await rpc<FeedSplit[] | null>('getFeed', { limit })
-  return data ?? []
+export interface FriendChoice {
+  friend_id: string;
+  friend_handle: string | null;
+  friend_color: string | null;
+  friend_side: Side;
 }
 
-export async function recordView(postId: string): Promise<void> {
-  await rpc<void>('recordView', { postId })
+export interface Tag {
+  slug: string;
+  label: string;
 }
 
-export async function recordSkip(postId: string, early: boolean): Promise<void> {
-  await rpc<void>('recordSkip', { postId, early })
+export interface MyProfile {
+  handle: string | null;
+  display_name: string | null;
+  avatar_color: string | null;
+  is_private: boolean;
+  inviteRedeemed: boolean;
 }
 
-export async function castChoice(cardId: string, side: Side): Promise<VoteResult> {
-  const raw = one<{ a_votes: number; b_votes: number; total_votes: number }>(
-    await rpc<any>('castChoice', { cardId, side }),
-  )
-  return raw
-    ? { a: raw.a_votes, b: raw.b_votes, total: raw.total_votes, my_side: side }
-    : { a: 0, b: 0, total: 0, my_side: side }
+export interface MySplit {
+  id: string;
+  title: string;
+  status: 'published' | 'hidden' | 'deleted';
+  vote_count: number;
+  skip_count: number;
+  remix_count: number;
+  created_at: string;
 }
 
-// Throws 'vote_first' if the caller hasn't voted; we swallow that and return null.
-export async function fetchSplitResult(cardId: string): Promise<VoteResult | null> {
-  try {
-    const raw = one<{ a_votes: number; b_votes: number; total_votes: number; my_side: Side }>(
-      await rpc<any>('getSplitResult', { cardId }),
-    )
-    return raw
-      ? { a: raw.a_votes, b: raw.b_votes, total: raw.total_votes, my_side: raw.my_side }
-      : null
-  } catch {
-    return null
+/** Messages for the short error codes raised by the database functions. */
+const MESSAGES: Record<string, string> = {
+  sign_in_required: 'Please sign in first.',
+  not_a_member: 'Finish setting up your account to do that.',
+  invalid_invite: "That invite code isn't valid or has been used up.",
+  invalid_handle: 'Handles are 3-20 characters: lowercase letters, numbers and underscores.',
+  handle_taken: 'That handle is taken. Try another.',
+  invalid_birth_date: 'Please enter a valid date of birth.',
+  too_young: 'Splyter is for people aged 13 and over.',
+  already_completed: 'Your profile is already set up.',
+  invalid_profile: "Something in your profile isn't valid.",
+  invalid_length: 'The prompt can be up to 160 characters and each option up to 60.',
+  invalid_tag: 'Pick one of the tags.',
+  blocked_content: "That text isn't allowed on Splyter.",
+  rate_limited: "You're going too fast. Try again in a bit.",
+  invalid_remix: "That Split can't be remixed.",
+  own_split: "You can't vote on your own Split.",
+  vote_first: 'Make your choice to see the result.',
+  not_found: "We couldn't find that.",
+  minor_must_stay_private: 'Accounts under 18 stay private.',
+  invalid_reason: 'Pick a reason.',
+};
+
+export class ApiError extends Error {
+  readonly code: string;
+  /** The untouched message from the database, for debugging. */
+  readonly raw: string;
+  constructor(code: string, raw: string) {
+    super(MESSAGES[code] ?? 'Something went wrong. Please try again.');
+    this.code = code;
+    this.raw = raw;
   }
 }
 
-// Create / delete
-
-export async function createDilemma(input: {
-  prompt: string
-  option_a: string
-  option_b: string
-  tag_slug: string
-  remix_of?: string | null
-}): Promise<string> {
-  const id = await rpc<string>('createDilemma', {
-    prompt: input.prompt,
-    optionA: input.option_a,
-    optionB: input.option_b,
-    tagSlug: input.tag_slug,
-    remixOf: input.remix_of ?? null,
-  })
-  if (typeof id !== 'string') throw new Error('create_dilemma returned no id')
-  return id
+function toApiError(message: string): ApiError {
+  const code = message in MESSAGES ? message : 'unknown';
+  return new ApiError(code, message);
 }
 
-export async function deleteSplit(postId: string): Promise<void> {
-  await rpc<void>('deleteSplit', { postId })
+async function rpc<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
+  const { data, error } = await supabase.rpc(fn, args);
+  if (error) throw toApiError(error.message);
+  return data as T;
 }
 
-// Moderation
-
-export async function reportPost(postId: string, reason: string): Promise<void> {
-  await rpc<void>('reportPost', { postId, reason })
+export function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  return 'Something went wrong. Please try again.';
 }
 
-// Setup / identity
+export const api = {
+  feed: (limit = 20) => rpc<FeedItem[]>('get_feed', { p_limit: limit }),
 
-export async function redeemInvite(code: string): Promise<void> {
-  await rpc<void>('redeemInvite', { code })
-}
+  recordView: (postId: string) => rpc<void>('record_view', { p_post_id: postId }),
+  recordSkip: (postId: string, early: boolean) => rpc<void>('record_skip', { p_post_id: postId, p_early: early }),
 
-export async function completeProfile(input: {
-  handle: string
-  displayName: string
-  avatarColor: string
-  birthDate: string
-}): Promise<void> {
-  await rpc<void>('completeProfile', input)
-}
+  async castChoice(cardId: string, side: Side): Promise<SplitResult> {
+    const rows = await rpc<SplitResult[]>('cast_choice', { p_card_id: cardId, p_side: side, p_guess: null });
+    return rows[0];
+  },
+  friendChoices: (cardId: string) => rpc<FriendChoice[]>('get_friend_choices', { p_card_id: cardId }),
 
-export async function setPrivate(isPrivate: boolean): Promise<void> {
-  await rpc<void>('setPrivate', { isPrivate })
-}
+  redeemInvite: (code: string) => rpc<void>('redeem_invite', { p_code: code.trim() }),
+  completeProfile: (args: { handle: string; displayName: string; avatarColor: string; birthDate: string }) =>
+    rpc<void>('complete_profile', {
+      p_handle: args.handle,
+      p_display_name: args.displayName,
+      p_avatar_color: args.avatarColor,
+      p_birth_date: args.birthDate,
+    }),
 
-export async function isMember(): Promise<boolean> {
-  return Boolean(await rpc<boolean>('isMember'))
-}
+  createDilemma: (args: { prompt: string; a: string; b: string; tag: string; remixOf?: string | null }) =>
+    rpc<string>('create_dilemma', {
+      p_prompt: args.prompt,
+      p_option_a: args.a,
+      p_option_b: args.b,
+      p_tag_slug: args.tag,
+      p_remix_of: args.remixOf ?? null,
+    }),
+  deleteSplit: (postId: string) => rpc<void>('delete_split', { p_post_id: postId }),
+  reportPost: (postId: string, reason: string) => rpc<void>('report_post', { p_post_id: postId, p_reason: reason }),
 
-export async function isAnonymous(): Promise<boolean> {
-  return Boolean(await rpc<boolean>('authIsAnonymous'))
-}
+  async follow(followeeId: string, myId: string): Promise<void> {
+    const { error } = await supabase.from('follows').insert({ follower_id: myId, followee_id: followeeId });
+    // 23505 = already following, which is fine.
+    if (error && error.code !== '23505') throw toApiError(error.message.includes('row-level security') ? 'not_a_member' : error.message);
+  },
 
-// Direct table reads
+  async tags(): Promise<Tag[]> {
+    const { data, error } = await supabase.from('tags').select('slug,label').order('sort_order');
+    if (error) throw toApiError(error.message);
+    return data as Tag[];
+  },
 
-export async function fetchProfile(userId: string): Promise<Profile | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, handle, display_name, avatar_color, bio, is_private, created_at')
-    .eq('id', userId)
-    .maybeSingle()
-  if (error) throw error
-  return (data as Profile) ?? null
-}
+  async myProfile(uid: string): Promise<MyProfile> {
+    const [p, priv] = await Promise.all([
+      supabase.from('profiles').select('handle,display_name,avatar_color,is_private').eq('id', uid).single(),
+      supabase.from('profile_private').select('invite_redeemed_at').eq('user_id', uid).single(),
+    ]);
+    if (p.error) throw toApiError(p.error.message);
+    if (priv.error) throw toApiError(priv.error.message);
+    return { ...p.data, inviteRedeemed: !!priv.data.invite_redeemed_at } as MyProfile;
+  },
 
-export async function fetchTags(): Promise<Tag[]> {
-  const { data, error } = await supabase
-    .from('tags')
-    .select('slug, label, sort_order')
-    .order('sort_order', { ascending: true })
-  if (error) throw error
-  return (data ?? []) as Tag[]
-}
+  /** How many choices the signed-in (or anonymous) user has made. Drives onboarding progress. */
+  async choiceCount(): Promise<number> {
+    const { count, error } = await supabase.from('choices').select('id', { count: 'exact', head: true });
+    if (error) throw toApiError(error.message);
+    return count ?? 0;
+  },
 
-export type MySplit = {
-  id: string
-  title: string
-  tag_slug: string
-  status: string
-  vote_count: number
-  created_at: string
-}
-
-export async function fetchMySplits(): Promise<MySplit[]> {
-  const { data: auth } = await supabase.auth.getUser()
-  const uid = auth.user?.id
-  if (!uid) return []
-  const { data, error } = await supabase
-    .from('posts')
-    .select('id, title, tag_slug, status, vote_count, created_at')
-    .eq('creator_id', uid)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return (data ?? []) as MySplit[]
-}
-
-export async function fetchChoiceCount(): Promise<number> {
-  const { count, error } = await supabase
-    .from('choices')
-    .select('*', { count: 'exact', head: true })
-  if (error) throw error
-  return count ?? 0
-}
+  async mySplits(uid: string): Promise<MySplit[]> {
+    const { data, error } = await supabase
+      .from('posts')
+      .select('id,title,status,vote_count,skip_count,remix_count,created_at')
+      .eq('creator_id', uid)
+      .neq('status', 'deleted')
+      .order('created_at', { ascending: false });
+    if (error) throw toApiError(error.message);
+    return data as MySplit[];
+  },
+};
