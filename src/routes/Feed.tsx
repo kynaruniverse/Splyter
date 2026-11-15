@@ -1,20 +1,18 @@
-// src/routes/Feed.tsx
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { BottomNav } from '../components/BottomNav'
 import { Card } from '../components/Card'
-import { RevealPanel } from '../components/RevealPanel'
 import { ReportSheet } from '../components/ReportSheet'
+import { RevealPanel } from '../components/RevealPanel'
 import { TapButtons } from '../components/TapButtons'
 import { useSwipe } from '../hooks/useSwipe'
-import { castVote, fetchFeed, fetchResults, recordSkip } from '../lib/api'
-import type { Results, Side, Split } from '../lib/types'
+import { castChoice, fetchFeed, recordSkip, recordView } from '../lib/api'
+import type { FeedSplit, Side, VoteResult } from '../lib/types'
 import { useSwipeStore } from '../store/swipe'
 
-type Reveal = Results & { choice: Side; pending: boolean }
-
 export function Feed() {
-  const [queue, setQueue] = useState<Split[]>([])
+  const [queue, setQueue] = useState<FeedSplit[]>([])
   const [index, setIndex] = useState(0)
-  const [reveal, setReveal] = useState<Reveal | null>(null)
+  const [reveal, setReveal] = useState<VoteResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reporting, setReporting] = useState(false)
   const visibleAt = useRef(0)
@@ -28,8 +26,10 @@ export function Feed() {
   }, [])
 
   useEffect(() => {
+    if (!current) return
     visibleAt.current = performance.now()
-  }, [current?.id])
+    recordView(current.post_id).catch(() => {})
+  }, [current?.post_id])
 
   const next = useCallback(() => {
     setReveal(null)
@@ -37,40 +37,21 @@ export function Feed() {
     setIndex((n) => n + 1)
   }, [])
 
-  const onChoice = useCallback(
-    async (side: Side) => {
-      if (!current) return
-      // Optimistic reveal from the counts we already hold — no invented numbers.
-      setReveal({
-        a: current.counts_a + (side === 'a' ? 1 : 0),
-        b: current.counts_b + (side === 'b' ? 1 : 0),
-        choice: side,
-        pending: true,
-      })
-
-      try {
-        await castVote(current.id, side)
-      } catch {
-        setError('Vote not saved — check your connection')
-      }
-
-      try {
-        const fresh = await fetchResults(current.id)
-        setReveal((r) => (r ? { ...fresh, choice: r.choice, pending: false } : r))
-        useSwipeStore.getState().reveal()
-      } catch {
-        setReveal((r) => (r ? { ...r, pending: false } : r))
-      }
-    },
-    [current],
-  )
+  const onChoice = useCallback(async (side: Side) => {
+    if (!current || reveal) return
+    try {
+      const result = await castChoice(current.card_id, side)
+      setReveal(result)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Vote not saved')
+    }
+  }, [current, reveal])
 
   const onSkip = useCallback(() => {
     if (!current) return
-    // "First second" is measured from when the card became visible.
-    const elapsed = performance.now() - visibleAt.current
+    const early = performance.now() - visibleAt.current < 1000
     next()
-    recordSkip(current.id, elapsed).catch(() => {})
+    recordSkip(current.post_id, early).catch(() => {})
   }, [current, next])
 
   const onBack = useCallback(() => {
@@ -103,25 +84,25 @@ export function Feed() {
     <main className="stack">
       <header className="topbar">
         <span className="brand">Splyter</span>
-        <button className="ghost" onClick={() => setReporting(true)}>
-          Report
-        </button>
+        <button className="ghost" onClick={() => setReporting(true)}>Report</button>
       </header>
 
       <div className="card-area">
-        <Card key={current.id} split={current} cardRef={cardRef} bind={bind} />
-        {reveal && (
-          <RevealPanel
-            choice={reveal.choice}
-            results={{ a: reveal.a, b: reveal.b }}
-            pending={reveal.pending}
-            onNext={next}
-          />
-        )}
+        <Card
+          key={current.card_id}
+          tag={current.tag_slug}
+          title={current.prompt}
+          option_a={current.option_a}
+          option_b={current.option_b}
+          cardRef={cardRef}
+          bind={reveal ? {} : bind}
+        />
+        {reveal && <RevealPanel result={reveal} onNext={next} />}
       </div>
 
       <TapButtons onChoice={onChoice} onSkip={onSkip} disabled={Boolean(reveal)} />
-      {reporting && <ReportSheet postId={current.id} onClose={() => setReporting(false)} />}
+      {reporting && <ReportSheet postId={current.post_id} onClose={() => setReporting(false)} />}
+      <BottomNav />
     </main>
   )
 }

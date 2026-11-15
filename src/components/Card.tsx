@@ -1,18 +1,20 @@
-import type { Split } from '../lib/types'
-
 type Props = {
-  split: Split
+  tag?: string | null
+  title?: string | null
+  option_a: string
+  option_b: string
   cardRef: React.RefObject<HTMLDivElement>
   bind: React.HTMLAttributes<HTMLDivElement>
 }
 
-export function Card({ split, cardRef, bind }: Props) {
+export function Card({ tag, title, option_a, option_b, cardRef, bind }: Props) {
   return (
     <div className="card" ref={cardRef} {...bind}>
-      {split.tags[0] && <span className="tag">{split.tags[0]}</span>}
-      <p className="prompt">{split.prompt_a}</p>
+      {tag && <span className="tag">{tag}</span>}
+      {title && <p className="card-title">{title}</p>}
+      <p className="prompt">{option_a}</p>
       <span className="or">or</span>
-      <p className="prompt">{split.prompt_b}</p>
+      <p className="prompt">{option_b}</p>
       <div className="hints">
         <span>← A</span>
         <span>↑ Skip</span>

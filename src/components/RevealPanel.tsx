@@ -1,30 +1,23 @@
-import type { Results, Side } from '../lib/types'
+import type { VoteResult } from '../lib/types'
 
 type Props = {
-  choice: Side
-  results: Results
-  pending: boolean
+  result: VoteResult
   onNext: () => void
 }
 
-export function RevealPanel({ choice, results, pending, onNext }: Props) {
-  const total = results.a + results.b
-  const pct = (n: number) => (total === 0 ? 0 : Math.round((n / total) * 100))
-
+export function RevealPanel({ result, onNext }: Props) {
+  const pct = (n: number) => (result.total === 0 ? 0 : Math.round((n / result.total) * 100))
   return (
     <div className="reveal">
-      <p className="reveal-label">You picked {choice.toUpperCase()}</p>
+      {result.my_side && <p className="reveal-label">You picked {result.my_side.toUpperCase()}</p>}
       <div className="bar-row">
-        <div className="bar bar-a" style={{ width: `${pct(results.a)}%` }} />
-        <div className="bar bar-b" style={{ width: `${pct(results.b)}%` }} />
+        <div className="bar bar-a" style={{ width: `${pct(result.a)}%` }} />
+        <div className="bar bar-b" style={{ width: `${pct(result.b)}%` }} />
       </div>
       <p className="reveal-counts">
-        A {pct(results.a)}% · B {pct(results.b)}%
-        {pending ? ' · counting' : ` · ${total} votes`}
+        A {pct(result.a)}% · B {pct(result.b)}% · {result.total} votes
       </p>
-      <button className="primary" onClick={onNext}>
-        Next
-      </button>
+      <button className="primary" onClick={onNext}>Next</button>
     </div>
   )
 }

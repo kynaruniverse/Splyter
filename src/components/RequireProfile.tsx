@@ -1,66 +1,129 @@
-import { useState } from 'react'
-import { completeProfile } from '../lib/api'
-import { useProfile } from '../hooks/useProfile'
+import { useEffect, useState } from 'react'
+import { completeProfile, isAnonymous, isMember, redeemInvite } from '../lib/api'
 
-// Age is collected once, after sign-up. Under-18s are locked private server-side.
-export function RequireProfile({
-  userId,
-  children,
-}: {
+type Props = {
   userId: string
   children: React.ReactNode
-}) {
-  const { profile, reload } = useProfile(userId)
-  const [ageBand, setAgeBand] = useState<'13-17' | '18+' | ''>('')
-  const [name, setName] = useState('')
+}
+
+const DEFAULT_COLOR = '#4f8cff'
+
+// A member is non-anonymous, has redeemed an invite, and has a handle.
+export function RequireProfile({ userId, children }: Props) {
+  const [state, setState] = useState<'loading' | 'anonymous' | 'setup' | 'member' | 'error'>('loading')
   const [error, setError] = useState<string | null>(null)
 
-  if (profile === undefined) return <p className="hint">Loading…</p>
-  if (profile && profile.age_band) return <>{children}</>
+  async function refresh() {
+    setState('loading')
+    try {
+      if (await isAnonymous()) return setState('anonymous')
+      if (await isMember()) return setState('member')
+      setState('setup')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load your account')
+      setState('error')
+    }
+  }
+
+  useEffect(() => { refresh() }, [userId])
+
+  if (state === 'loading') return <p className="hint">Loading…</p>
+  if (state === 'error') return <p className="error">{error}</p>
+
+  if (state === 'anonymous') {
+    return (
+      <div className="gate">
+        <h1>Sign in to continue</h1>
+        <p className="hint">Your choices are saved. Sign in fully to join the feed.</p>
+        <button className="primary" onClick={() => { window.location.href = '/signin' }}>
+          Sign in
+        </button>
+      </div>
+    )
+  }
+
+  if (state === 'setup') return <SetupForm onDone={refresh} />
+
+  return <>{children}</>
+}
+
+function SetupForm({ onDone }: { onDone: () => void }) {
+  const [code, setCode] = useState('')
+  const [handle, setHandle] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [avatarColor, setAvatarColor] = useState(DEFAULT_COLOR)
+  const [birthDate, setBirthDate] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleOk = /^[a-z0-9_]{3,20}$/.test(handle)
+  const ageOk = (() => {
+    if (!birthDate) return false
+    const d = new Date(birthDate)
+    if (isNaN(d.getTime())) return false
+    const age = Math.floor((Date.now() - d.getTime()) / (365.25 * 24 * 3600 * 1000))
+    return age >= 13
+  })()
+  const canSubmit = code.trim().length > 0 && handleOk && ageOk && !busy
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
-    if (!ageBand) return
+    if (!canSubmit) return
+    setBusy(true)
+    setError(null)
     try {
-      await completeProfile(name, ageBand)
-      reload()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save')
+      await redeemInvite(code.trim())
+      await completeProfile({ handle, displayName, avatarColor, birthDate })
+      onDone()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Could not finish setup'
+      setError(msg.replace(/^\w+:\s*/, ''))
+    } finally {
+      setBusy(false)
     }
   }
 
   return (
     <form className="gate" onSubmit={submit}>
-      <h1>One last thing</h1>
+      <h1>Set up your account</h1>
+      <p className="hint">Splyter is invite-only during the test.</p>
+
       <label>
-        Display name
-        <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={24} />
+        Invite code
+        <input value={code} onChange={(e) => setCode(e.target.value)} autoComplete="off" />
       </label>
-      <fieldset>
-        <legend>Age</legend>
-        <label>
-          <input
-            type="radio"
-            name="age"
-            checked={ageBand === '13-17'}
-            onChange={() => setAgeBand('13-17')}
-          />
-          13–17
-        </label>
-        <label>
-          <input
-            type="radio"
-            name="age"
-            checked={ageBand === '18+'}
-            onChange={() => setAgeBand('18+')}
-          />
-          18 or over
-        </label>
-      </fieldset>
-      <p className="hint">Under-18 accounts are private by default and can't be changed later.</p>
+
+      <label>
+        Handle
+        <input
+          value={handle}
+          onChange={(e) => setHandle(e.target.value.toLowerCase())}
+          placeholder="lowercase, 3-20 chars"
+          autoComplete="off"
+        />
+        {handle && !handleOk && <span className="hint">3-20 chars: a-z, 0-9, _</span>}
+      </label>
+
+      <label>
+        Display name (optional)
+        <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={40} />
+      </label>
+
+      <label>
+        Avatar colour
+        <input type="color" value={avatarColor} onChange={(e) => setAvatarColor(e.target.value)} />
+      </label>
+
+      <label>
+        Date of birth
+        <input type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
+      </label>
+      <p className="hint">13+. Under-18 accounts stay private.</p>
+
       {error && <p className="error">{error}</p>}
-      <button className="primary" disabled={!ageBand}>
-        Continue
+
+      <button className="primary" disabled={!canSubmit}>
+        {busy ? 'Setting up…' : 'Finish setup'}
       </button>
     </form>
   )

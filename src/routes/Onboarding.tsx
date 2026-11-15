@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card } from '../components/Card'
 import { useSwipe } from '../hooks/useSwipe'
@@ -28,12 +28,17 @@ export function Onboarding() {
   return (
     <main className="stack">
       <header className="topbar">
-        <span>
-          {i + 1} / {sampleSplits.length}
-        </span>
+        <span>{i + 1} / {sampleSplits.length}</span>
       </header>
       <div className="card-area">
-        <Card key={current.id} split={current} cardRef={cardRef} bind={bind} />
+        <Card
+          key={current.id}
+          tag={current.tag}
+          option_a={current.option_a}
+          option_b={current.option_b}
+          cardRef={cardRef}
+          bind={bind}
+        />
       </div>
     </main>
   )

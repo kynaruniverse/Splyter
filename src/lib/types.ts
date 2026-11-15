@@ -1,21 +1,40 @@
 export type Side = 'a' | 'b'
 
-export type Split = {
-  id: string
-  prompt_a: string
-  prompt_b: string
-  tags: string[]
-  counts_a: number
-  counts_b: number
-  author_id: string | null
+// Matches get_feed(...) columns exactly.
+export type FeedSplit = {
+  post_id: string
+  card_id: string
+  creator_id: string
+  creator_handle: string | null
+  prompt: string
+  option_a: string
+  option_b: string
+  tag_slug: string
+  remix_of_post_id: string | null
+  created_at: string
+  score: number
 }
 
-export type Results = { a: number; b: number }
+// Matches cast_choice(...) and get_split_result(...) columns exactly.
+export type VoteResult = {
+  a: number
+  b: number
+  total: number
+  my_side?: Side
+}
 
 export type Profile = {
   id: string
+  handle: string | null
   display_name: string | null
-  age_band: '13-17' | '18+' | null
+  avatar_color: string | null
+  bio: string | null
   is_private: boolean
-  onboarded_at: string | null
+  created_at: string
+}
+
+export type Tag = {
+  slug: string
+  label: string
+  sort_order: number
 }

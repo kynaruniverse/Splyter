@@ -1,7 +1,14 @@
 import { useState } from 'react'
-import { reportSplit } from '../lib/api'
+import { reportPost } from '../lib/api'
 
-const reasons = ['Harmful or hateful', 'Misleading', 'Spam', 'Something else']
+const REASONS = [
+  { value: 'spam', label: 'Spam' },
+  { value: 'hate', label: 'Hate speech' },
+  { value: 'harassment', label: 'Harassment' },
+  { value: 'sexual', label: 'Sexual content' },
+  { value: 'self_harm', label: 'Self-harm' },
+  { value: 'other', label: 'Something else' },
+] as const
 
 export function ReportSheet({ postId, onClose }: { postId: string; onClose: () => void }) {
   const [sent, setSent] = useState(false)
@@ -9,7 +16,7 @@ export function ReportSheet({ postId, onClose }: { postId: string; onClose: () =
 
   async function send(reason: string) {
     try {
-      await reportSplit(postId, reason)
+      await reportPost(postId, reason)
       setSent(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Report failed')
@@ -23,16 +30,14 @@ export function ReportSheet({ postId, onClose }: { postId: string; onClose: () =
         {sent ? (
           <p>Thanks — this is with the moderators.</p>
         ) : (
-          reasons.map((r) => (
-            <button key={r} className="sheet-option" onClick={() => send(r)}>
-              {r}
+          REASONS.map((r) => (
+            <button key={r.value} className="sheet-option" onClick={() => send(r.value)}>
+              {r.label}
             </button>
           ))
         )}
         {error && <p className="error">{error}</p>}
-        <button className="ghost" onClick={onClose}>
-          Close
-        </button>
+        <button className="ghost" onClick={onClose}>Close</button>
       </div>
     </div>
   )

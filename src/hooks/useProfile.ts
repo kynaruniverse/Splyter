@@ -12,9 +12,7 @@ export function useProfile(userId: string | undefined) {
     fetchProfile(userId)
       .then((p) => !cancelled && setProfile(p))
       .catch(() => !cancelled && setProfile(null))
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [userId, reloadKey])
 
   return { profile, reload: () => setReloadKey((k) => k + 1) }

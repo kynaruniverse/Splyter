@@ -1,12 +1,8 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { emailUpgradeOrSignIn, googleUpgradeOrSignIn } from '../lib/auth'
-import { redeemInvite } from '../lib/api'
 
 export function SignIn() {
-  const navigate = useNavigate()
   const [email, setEmail] = useState('')
-  const [code, setCode] = useState('')
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -33,49 +29,21 @@ export function SignIn() {
     })
   }
 
-  async function claim() {
-    await run(async () => {
-      await redeemInvite(code)
-      navigate('/feed')
-      return { error: null }
-    })
-  }
-
   return (
     <div className="gate">
-      <h1>Keep your votes</h1>
-      <p className="hint">Sign in and the choices you already made stay on this account.</p>
-
+      <h1>Sign in</h1>
+      <p className="hint">Keep your votes. Sign in and we'll walk you through setup.</p>
       <button className="primary" disabled={busy} onClick={() => run(googleUpgradeOrSignIn)}>
         Continue with Google
       </button>
-
       <form onSubmit={submit}>
         <label>
           Email
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </label>
-        <button className="secondary" disabled={busy}>
-          Email me a link
-        </button>
+        <button className="secondary" disabled={busy}>Email me a link</button>
       </form>
-
       {status && <p className="hint">{status}</p>}
-
-      <hr />
-      <label>
-        Invite code
-        <input value={code} onChange={(e) => setCode(e.target.value)} />
-      </label>
-      <button className="secondary" disabled={busy || !code} onClick={claim}>
-        Use code
-      </button>
-
       {error && <p className="error">{error}</p>}
     </div>
   )
